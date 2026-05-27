@@ -1,3 +1,8 @@
+# Taller 1 Poster — Análisis de la tasa de crecimiento del PIB de Alemania (1961–2019)
+# Autor: Diego Alejandro Lizarazo Carrera, Sergio Meléndez Gutiérrez y Luisa PENDIENTE PENDIENTE
+# Grupo: Luis Luna
+# Econometría II, Facultad de Ciencias Económicas, Universiddad Nacional de Colombia
+
 # %% Importación de paquetes ============================
 
 # Trabajar con rutas relativas en python
