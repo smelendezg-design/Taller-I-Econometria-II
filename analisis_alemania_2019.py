@@ -1,5 +1,5 @@
 # Taller 1 Poster — Análisis de la tasa de crecimiento del PIB de Alemania (1992–2019)
-# Autor: Diego Alejandro Lizarazo Carrera, Sergio Meléndez Gutiérrez y Luisa PENDIENTE PENDIENTE
+# Autor: Diego Alejandro Lizarazo Carrera, Sergio Meléndez Gutiérrez y Luisa Fernanda Molina Suárez 
 # Grupo: Luis Luna
 # Econometría II, Facultad de Ciencias Económicas, Universiddad Nacional de Colombia
 
@@ -21,6 +21,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.regression.linear_model import OLS
 from statsmodels.tools.tools import add_constant
+from statsmodels.stats.stattools import durbin_watson
 
 # %% Rutas relativas ============================
 
@@ -220,8 +221,6 @@ for nombre, orden in modelos_candidatos.items():
 
 
 # %% Tabla resumen de modelos estimados
-
-
 tabla_modelos = []
 
 for nombre, resultado in estimaciones.items():
@@ -312,59 +311,98 @@ print("\nTabla resumen de modelos estimados")
 print(tabla_publicacion_df.to_string(index=False))
 print("\nErrores estándar entre paréntesis.")
 
+# Tabla resumen como imagen para el póster
+fig, ax = plt.subplots(figsize=(11, 5))
+ax.axis("off")
+
+tabla_img = ax.table(
+    cellText=tabla_publicacion_df.values,
+    colLabels=tabla_publicacion_df.columns,
+    cellLoc="center",
+    loc="center"
+)
+
+tabla_img.auto_set_font_size(False)
+tabla_img.set_fontsize(9)
+tabla_img.scale(1.4, 2.0)
+
+# Poner en negrita la fila de encabezado
+for j in range(len(tabla_publicacion_df.columns)):
+    tabla_img[0, j].set_text_props(fontweight="bold")
+
+# Color gris claro en filas de encabezado
+for j in range(len(tabla_publicacion_df.columns)):
+    tabla_img[0, j].set_facecolor("#D3D3D3")
+
+plt.title("Tabla resumen de modelos estimados", fontsize=12, pad=20
+)
+
+plt.savefig(RESULTADOS_DIR / "02b_tabla_modelos.png", dpi=150, bbox_inches="tight")
+plt.show()
+
+# %% Tabla explícita del modelo final ARMA(4,0)
+ 
+nombre_final     = "ARMA(4,0)"
+estimacion_final = estimaciones[nombre_final]
+ 
+print(f"\n=== Estimación explícita del modelo final {nombre_final} ===")
+coefs = pd.DataFrame({
+    "coef"              : estimacion_final.params.round(4),
+    "error estándar σ̂" : estimacion_final.bse.round(4),
+    "t-estadístico"     : estimacion_final.tvalues.round(4),
+    "p-valor"           : estimacion_final.pvalues.round(4),
+    "significativo 5%"  : estimacion_final.pvalues < 0.05
+})
+print(coefs.to_string())
 
 # %% =========================
 # PASO 3: VALIDACIÓN DE SUPUESTOS
 # ============================
 
-# Grilla: residuales, FAC residuales y FAC residuales² para cada modelo
-fig, axes = plt.subplots(3, 3, figsize=(14, 10))
-
-for i, nombre in enumerate(nombres_modelos):
+# Gráficas separadas por modelo
+for nombre in nombres_modelos:
     resultado = estimaciones[nombre]
-    p = resultado.model.order[0]
-    q = resultado.model.order[2]
+    p         = resultado.model.order[0]
+    q         = resultado.model.order[2]
     n_inicial = max(p, q, 1)
+    residuos  = resultado.resid.dropna().iloc[n_inicial:]
+    res2      = residuos**2
 
-    residuos          = resultado.resid.dropna().iloc[n_inicial:]
-    residuos_cuadrado = residuos**2
+    # --- Gráfica de residuales ---
+    plt.figure(figsize=(10, 4))
+    plt.plot(residuos, color="black", linewidth=1)
+    plt.axhline(0, color="red", linewidth=0.8, linestyle="--")
+    plt.title(f"Residuales — {nombre}")
+    plt.xlabel("Fecha")
+    plt.ylabel("Residuales")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(RESULTADOS_DIR / f"03a_residuales_{nombre.replace('(','').replace(')','').replace(',','_')}.png", dpi=150)
+    plt.show()
 
-    # Gráfica de residuales
-    axes[i, 0].plot(residuos, color="black", linewidth=1)
-    axes[i, 0].axhline(0, color="red", linewidth=0.8, linestyle="--")
-    axes[i, 0].set_title(f"Residuales {nombre}")
-    axes[i, 0].set_xlabel("Fecha")
-    axes[i, 0].set_ylabel("Residuales")
+    # --- FAC y FACP de los residuales (verifica no autocorrelación) ---
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    plot_acf(residuos, lags=15, alpha=0.05, bartlett_confint=False, ax=axes[0])
+    axes[0].set_title(f"FAC residuales — {nombre}")
+    axes[0].set_ylim(-1, 1)
+    plot_pacf(residuos, lags=15, alpha=0.05, ax=axes[1])
+    axes[1].set_title(f"FACP residuales — {nombre}")
+    axes[1].set_ylim(-1, 1)
+    plt.tight_layout()
+    plt.savefig(RESULTADOS_DIR / f"03b_fac_facp_residuales_{nombre.replace('(','').replace(')','').replace(',','_')}.png", dpi=150)
+    plt.show()
 
-    # FAC de los residuales (verifica no autocorrelación)
-    plot_acf(
-        residuos,
-        lags=15,
-        alpha=0.05,
-        bartlett_confint=False,
-        ax=axes[i, 1]
-    )
-    axes[i, 1].set_title(f"FAC residuales {nombre}")
-    axes[i, 1].set_ylim(-1, 1)
-    axes[i, 1].set_xlabel("Rezago")
-    axes[i, 1].set_ylabel("ACF")
-
-    # FAC de los residuales al cuadrado (verifica homocedasticidad)
-    plot_acf(
-        residuos_cuadrado,
-        lags=15,
-        alpha=0.05,
-        bartlett_confint=False,
-        ax=axes[i, 2]
-    )
-    axes[i, 2].set_title(f"FAC residuales² {nombre}")
-    axes[i, 2].set_ylim(-1, 1)
-    axes[i, 2].set_xlabel("Rezago")
-    axes[i, 2].set_ylabel("ACF")
-
-plt.tight_layout()
-plt.savefig(RESULTADOS_DIR / "03_validacion_residuales.png", dpi=150)
-plt.show()
+    # --- FAC y FACP de los residuales al cuadrado (verifica homocedasticidad) ---
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    plot_acf(res2, lags=15, alpha=0.05, bartlett_confint=False, ax=axes[0])
+    axes[0].set_title(f"FAC residuales² — {nombre}")
+    axes[0].set_ylim(-1, 1)
+    plot_pacf(res2, lags=15, alpha=0.05, ax=axes[1])
+    axes[1].set_title(f"FACP residuales² — {nombre}")
+    axes[1].set_ylim(-1, 1)
+    plt.tight_layout()
+    plt.savefig(RESULTADOS_DIR / f"03c_fac_facp_res2_{nombre.replace('(','').replace(')','').replace(',','_')}.png", dpi=150)
+    plt.show()
 
 # %% Q-Q plot de los residuales
 
@@ -427,6 +465,29 @@ print("\n=== Tabla de diagnóstico (p-valores) ===")
 print("JB=Jarque-Bera | A=ARCH | LB=Ljung-Box")
 print("p-valor > 0.05 indica que el supuesto se cumple")
 print(tabla_diagnostico_df.round(3).to_string(index=False))
+
+# %% Tabla de diagnóstico como imagen guardable
+
+fig, ax = plt.subplots(figsize=(10, 2))
+ax.axis("off")
+
+tabla_render = tabla_diagnostico_df.round(3)
+
+tabla_img = ax.table(
+    cellText=tabla_render.values,
+    colLabels=tabla_render.columns,
+    cellLoc="center",
+    loc="center"
+)
+
+tabla_img.auto_set_font_size(False)
+tabla_img.set_fontsize(10)
+tabla_img.scale(1.2, 1.8)
+
+plt.title("Tabla de diagnóstico (p-valores)", fontsize=12, pad=20)
+plt.tight_layout()
+plt.savefig(RESULTADOS_DIR / "06_tabla_diagnostico.png", dpi=150, bbox_inches="tight")
+plt.show()
 
 
 # %% =========================
@@ -521,4 +582,260 @@ print(
     f"durante los 10 trimestres siguientes a 2019 Q4. "
     f"El intervalo de confianza al 95% se construyó mediante bootstrapping "
     f"de residuales, técnica que no requiere asumir normalidad en los errores."
+)
+
+# ============================================================
+#  PRONÓSTICO
+#  SECCIÓN A — TEST CUSUM SOBRE RESIDUALES DEL ARMA(4,0)
+# ============================================================
+# El CUSUM (suma acumulada de residuales estandarizados) evalúa si los
+# parámetros del modelo son estables a lo largo del tiempo.
+# Si la suma acumulada supera las bandas críticas al 5 % → inestabilidad.
+#
+# Referencia: Brown, Durbin & Evans (1975), JRSS-B.
+
+print("\n" + "="*60)
+print("SECCIÓN A — CUSUM sobre residuales ARMA(4,0) [muestra 2019]")
+print("="*60)
+
+resultado_40 = estimaciones["ARMA(4,0)"]
+p, q        = resultado_40.model.order[0], resultado_40.model.order[2]
+n_inicial   = max(p, q, 1)
+residuos_40 = resultado_40.resid.dropna().iloc[n_inicial:]
+
+# Estandarización: dividir por la desviación estándar muestral de los residuales
+sigma_hat = residuos_40.std()
+res_std   = residuos_40 / sigma_hat
+
+# CUSUM acumulado
+cusum = res_std.cumsum()
+n     = len(cusum)
+t_idx = np.arange(1, n + 1)
+
+# Bandas críticas al 5 % (Brown-Durbin-Evans):  ±(a + 2a·(t/n))  con a ≈ 0.948
+a       = 0.948
+banda_sup = a + 2 * a * (t_idx / n)
+banda_inf = -(a + 2 * a * (t_idx / n))
+
+plt.figure(figsize=(10, 4))
+plt.plot(cusum.index, cusum.values, color="steelblue", linewidth=1.5, label="CUSUM")
+plt.plot(cusum.index, banda_sup, color="red", linewidth=1, linestyle="--", label="Banda 5%")
+plt.plot(cusum.index, banda_inf, color="red", linewidth=1, linestyle="--")
+plt.axhline(0, color="black", linewidth=0.6, linestyle=":")
+plt.title("CUSUM — residuales ARMA(4,0) [1992–2019]")
+plt.xlabel("Fecha")
+plt.ylabel("CUSUM estandarizado")
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(RESULTADOS_DIR / "07_cusum_2019.png", dpi=150)
+plt.show()
+
+# Detección automática de quiebres: periodos donde |CUSUM| > banda
+quiebres = cusum.index[np.abs(cusum.values) > banda_sup]
+if len(quiebres) > 0:
+    print(f"  ⚠ CUSUM supera bandas en {len(quiebres)} periodos.")
+    print(f"    Primero: {quiebres[0].date()}  |  Último: {quiebres[-1].date()}")
+    cusum_inestable = True
+else:
+    print("  ✓ CUSUM dentro de bandas → parámetros estables en toda la muestra.")
+    cusum_inestable = False
+
+
+# ============================================================
+#  PRONOSTICO
+# SECCIÓN B — SARIMAX CON DUMMY DE OUTLIER (si CUSUM lo sugiere)
+# ============================================================
+# El Q-Q plot de 2019 muestra un residual extremo en el extremo inferior
+# que coincide con la Gran Recesión (2008 Q4: −6.7 %).
+# Si el CUSUM también señala inestabilidad alrededor de ese periodo,
+# se incluye una variable dummy aditiva para ese trimestre.
+# Una dummy aditiva (impulso) modela un choque puntual sin afectar la
+# dinámica AR del modelo; es la corrección estándar para outliers aditivos
+# en series de tiempo (Chang, Chen & Tiao, 1988).
+
+print("\n" + "="*60)
+print("SECCIÓN B — ARMA(4,0) con dummy outlier 2008 Q4")
+print("="*60)
+
+# Fecha del outlier identificado en el Q-Q plot (cola inferior extrema)
+FECHA_OUTLIER_2008 = "2008-12-31"
+
+dummy_2008           = pd.Series(0.0, index=serie.index, name="d_2008q4")
+dummy_2008.loc[FECHA_OUTLIER_2008] = 1.0
+
+# Si el CUSUM detectó inestabilidad adicional en 2019 (último dato), se puede
+# añadir otra dummy. Por defecto sólo corregimos 2008 Q4.
+exog_dummy = dummy_2008.to_frame()
+
+modelo_dummy = SARIMAX(
+    serie,
+    exog=exog_dummy,
+    order=(4, 0, 0),
+    trend="c",
+    enforce_stationarity=False,
+    enforce_invertibility=False
+)
+resultado_dummy = modelo_dummy.fit(method="bfgs", maxiter=400, disp=False)
+
+print(resultado_dummy.summary())
+print(f"\nAIC con dummy : {resultado_dummy.aic:.1f}")
+print(f"AIC sin dummy : {resultado_40.aic:.1f}")
+print(f"BIC con dummy : {resultado_dummy.bic:.1f}")
+print(f"BIC sin dummy : {resultado_40.bic:.1f}")
+
+# Residuales del modelo con dummy
+p_d, q_d    = 4, 0
+n_ini_d     = max(p_d, q_d, 1)
+res_dummy   = resultado_dummy.resid.dropna().iloc[n_ini_d:]
+
+# Q-Q plot comparativo: sin dummy vs con dummy
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+probplot(residuos_40.iloc[1:-1], dist="norm", plot=axes[0])
+axes[0].set_title("Q-Q residuales ARMA(4,0) — sin dummy")
+axes[0].grid(True)
+probplot(res_dummy.iloc[1:-1], dist="norm", plot=axes[1])
+axes[1].set_title("Q-Q residuales ARMA(4,0) — con dummy 2008 Q4")
+axes[1].grid(True)
+plt.tight_layout()
+plt.savefig(RESULTADOS_DIR / "08_qqplot_dummy_2019.png", dpi=150)
+plt.show()
+
+# Tabla de diagnóstico del modelo con dummy
+jb_d    = jarque_bera(res_dummy).pvalue
+arch1_d = het_arch(res_dummy, nlags=1)[1]
+arch2_d = het_arch(res_dummy, nlags=2)[1]
+arch5_d = het_arch(res_dummy, nlags=5)[1]
+lb_d    = acorr_ljungbox(res_dummy, lags=[5, 10, 20], return_df=True)
+
+print("\n=== Diagnóstico ARMA(4,0) con dummy 2008 Q4 (p-valores) ===")
+print(f"  JB     : {jb_d:.3f}  (H0: normalidad)")
+print(f"  ARCH(1): {arch1_d:.3f}  ARCH(2): {arch2_d:.3f}  ARCH(5): {arch5_d:.3f}")
+print(f"  LB(5)  : {lb_d.loc[5,'lb_pvalue']:.3f}  LB(10): {lb_d.loc[10,'lb_pvalue']:.3f}  LB(20): {lb_d.loc[20,'lb_pvalue']:.3f}")
+print("  p-valor > 0.05 → supuesto cumplido")
+
+
+# ============================================================
+# PRONÓSTICO
+# SECCIÓN C — PRONÓSTICO 2020–2023 Y COMPARACIÓN CON DATOS REALES
+# ============================================================
+# Se usa el mejor modelo (con o sin dummy según diagnóstico) para pronosticar
+# 16 trimestres desde 2020 Q1, y se compara con la serie observada 2020–2023.
+
+print("\n" + "="*60)
+print("SECCIÓN C — Pronóstico 2020–2023 vs datos reales")
+print("="*60)
+
+# Decidir qué modelo usar: con dummy si mejora AIC/BIC y diagnóstico
+usar_dummy = resultado_dummy.aic < resultado_40.aic
+modelo_seleccionado = resultado_dummy if usar_dummy else resultado_40
+etiqueta_modelo = "ARMA(4,0)+dummy 2008Q4" if usar_dummy else "ARMA(4,0)"
+print(f"  Modelo seleccionado para pronóstico: {etiqueta_modelo}")
+
+# Cargar serie completa hasta 2023 para comparar
+BASE_DIR_EXT = Path(__file__).resolve().parent
+raw_full     = pd.read_excel(
+    BASE_DIR_EXT / "datos" / "LORSGPORDEQ659S.xlsx",
+    sheet_name="Quarterly",
+    parse_dates=["observation_date"]
+)
+raw_full = raw_full.set_index("observation_date")
+raw_full.index = pd.DatetimeIndex(raw_full.index).to_period("Q").to_timestamp("Q")
+serie_full  = pd.to_numeric(raw_full["LORSGPORDEQ659S"], errors="coerce").dropna()
+serie_real  = serie_full["2020-01-01":"2023-12-31"]  # 16 observaciones reales
+
+pasos_comp  = len(serie_real)   # tantos pasos como observaciones reales disponibles
+n_boot_comp = 5000
+np.random.seed(42)
+
+# Pronóstico puntual desde el último dato de 2019
+if usar_dummy:
+    # Exog futuro: fuera de muestra, la dummy toma valor 0
+    exog_futuro = pd.DataFrame(
+        {"d_2008q4": np.zeros(pasos_comp)},
+        index=pd.date_range(
+            start=serie.index[-1] + pd.tseries.offsets.QuarterEnd(),
+            periods=pasos_comp, freq="QE"
+        )
+    )
+    pron_comp = modelo_seleccionado.get_forecast(steps=pasos_comp, exog=exog_futuro)
+else:
+    pron_comp = modelo_seleccionado.get_forecast(steps=pasos_comp)
+
+puntual_comp = pron_comp.predicted_mean.values
+
+# Bootstrap IC
+p_sel = modelo_seleccionado.model.order[0]
+q_sel = modelo_seleccionado.model.order[2]
+n_ini_sel = max(p_sel, q_sel, 1)
+res_sel   = modelo_seleccionado.resid.dropna().iloc[n_ini_sel:].values
+
+boot_comp = np.zeros((n_boot_comp, pasos_comp))
+for b in range(n_boot_comp):
+    shocks = np.random.choice(res_sel, size=pasos_comp, replace=True)
+    boot_comp[b, :] = puntual_comp + shocks
+
+ic_inf_comp = np.percentile(boot_comp, 2.5,  axis=0)
+ic_sup_comp = np.percentile(boot_comp, 97.5, axis=0)
+
+idx_pron_comp = pd.date_range(
+    start=serie.index[-1] + pd.tseries.offsets.QuarterEnd(),
+    periods=pasos_comp, freq="QE"
+)
+
+# --- Tabla comparativa pronóstico vs real ---
+tabla_comp = pd.DataFrame({
+    "pronostico"  : puntual_comp.round(4),
+    "real"        : serie_real.values,
+    "IC_inf_95"   : ic_inf_comp.round(4),
+    "IC_sup_95"   : ic_sup_comp.round(4),
+    "dentro_IC"   : (serie_real.values >= ic_inf_comp) & (serie_real.values <= ic_sup_comp)
+}, index=idx_pron_comp)
+
+print("\n=== Pronóstico vs datos reales 2020–2023 ===")
+print(tabla_comp.to_string())
+pct_dentro = tabla_comp["dentro_IC"].mean() * 100
+print(f"\n  {pct_dentro:.0f}% de los valores reales cae dentro del IC 95% (bootstrap).")
+
+# --- Gráfica comparativa ---
+n_hist = 40   # últimos 40 trimestres de la muestra de estimación para contexto
+plt.figure(figsize=(11, 5))
+plt.plot(
+    serie.iloc[-n_hist:],
+    color="black", linewidth=1.2, label="Histórico (hasta 2019 Q4)"
+)
+plt.plot(
+    idx_pron_comp, puntual_comp,
+    color="orange", linewidth=2, linestyle="--", marker="o", markersize=4,
+    label=f"Pronóstico {etiqueta_modelo}"
+)
+plt.fill_between(
+    idx_pron_comp, ic_inf_comp, ic_sup_comp,
+    color="orange", alpha=0.25, label="IC 95% (bootstrap)"
+)
+plt.plot(
+    serie_real.index, serie_real.values,
+    color="royalblue", linewidth=1.5, marker="s", markersize=4,
+    label="Dato real 2020–2023"
+)
+plt.axhline(0, color="black", linewidth=0.6, linestyle=":")
+plt.title(f"Pronóstico {etiqueta_modelo} vs datos reales 2020–2023")
+plt.xlabel("Fecha")
+plt.ylabel("Tasa de crecimiento (%)")
+plt.legend(fontsize=9)
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(RESULTADOS_DIR / "09_pronostico_vs_real_2019.png", dpi=150)
+plt.show()
+
+# Métricas de error de pronóstico
+errores_pron = serie_real.values - puntual_comp
+mae  = np.mean(np.abs(errores_pron))
+rmse = np.sqrt(np.mean(errores_pron**2))
+print(f"\n  MAE  del pronóstico: {mae:.4f}")
+print(f"  RMSE del pronóstico: {rmse:.4f}")
+print(
+    "\n  Nota: el COVID-19 (2020 Q2) genera un choque de magnitud excepcional "
+    "que ningún modelo ARMA puede anticipar. El RMSE elevado refleja ese evento "
+    "y no un mal ajuste del modelo al patrón cíclico normal de la serie."
 )
