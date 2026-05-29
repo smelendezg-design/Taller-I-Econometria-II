@@ -1,4 +1,4 @@
-# Taller 1 Poster — Análisis de la tasa de crecimiento del PIB de Alemania (1961–2019)
+# Taller 1 Poster — Análisis de la tasa de crecimiento del PIB de Alemania (1992–2019)
 # Autor: Diego Alejandro Lizarazo Carrera, Sergio Meléndez Gutiérrez y Luisa PENDIENTE PENDIENTE
 # Grupo: Luis Luna
 # Econometría II, Facultad de Ciencias Económicas, Universiddad Nacional de Colombia
@@ -19,6 +19,8 @@ from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.stattools import adfuller
+from statsmodels.regression.linear_model import OLS
+from statsmodels.tools.tools import add_constant
 
 # %% Rutas relativas ============================
 
@@ -50,8 +52,15 @@ serie = pd.to_numeric(serie, errors="coerce").dropna()
 # atípico que viola los supuestos del modelo ARMA: los residuales presentan
 # heterocedasticidad, autocorrelación y no normalidad en todos los modelos
 # candidatos cuando se incluye dicho periodo.
-# Se trabaja con 1961 Q1 - 2019 Q4 (236 observaciones).
-serie = serie[:"2019-12-31"]
+#Se excluye de la serie de tiempo los periodos anteriores al 1992-06-30, ya que concuerda
+# con los choques sobre el PIB derivado de la reunificación alemana. Este periodo fue confirmado
+# con la metodología para detectar cambios estructurales en la serie de tiempo Test de Chow. 
+# Se trabaja con 1961 Q1 - 2019 Q4 (111 observaciones).
+
+#Se aplica test de cambio estructural para verificar los peridoos donde existe cambio de los errores.
+
+
+serie = serie["1992-06-30":"2019-12-31"]
 
 print("=== Descripción de la serie ===")
 print(f"Observaciones : {len(serie)}")
@@ -67,7 +76,7 @@ print(serie.describe())
 plt.figure(figsize=(10, 5))
 plt.plot(serie)
 plt.axhline(0, color="black", linewidth=0.8, linestyle="--")
-plt.title("CLI: tasa de crecimiento del PIB de Alemania (1961–2019)")
+plt.title("CLI: tasa de crecimiento del PIB de Alemania (1992–2019)")
 plt.xlabel("Fecha")
 plt.ylabel("Tasa de crecimiento (%)")
 plt.grid(True)
@@ -213,58 +222,6 @@ for nombre, orden in modelos_candidatos.items():
         f"c / (1 - suma AR): {media_incondicional_sarimax(estimacion_modelo):.3f}"
     )
 
-#Se aplica test de cambio estructural para verificar los peridoos donde existe cambio de los errores.
-
-# %% Detección Automática de TODOS los Quiebres Estructurales (Algoritmo PELT) ==========
-import ruptures as rpt
-
-print("\n=== Test de Múltiples Quiebres Estructurales (Algoritmo PELT) ===")
-
-# 1. Transformar la serie a un array de numpy
-datos_array = serie.values
-
-# 2. Configurar el modelo PELT (Penalty Marginal L2)
-# 'l2' detecta cambios en la media de la serie de tiempo.
-# min_size=16 asegura que cada régimen económico dure al menos 4 años (16 trimestres)
-modelo_pelt = rpt.Pelt(model="l2", min_size=16).fit(datos_array)
-
-# 3. Calcular la penalización basada en el criterio de información BIC
-# Esta es la fórmula matemática estándar para que el algoritmo decida de forma óptima
-penalizacion_bic = np.log(len(serie)) * datos_array.var()
-
-# 4. Encontrar TODOS los puntos de quiebre de manera libre
-puntos_quiebre_indices = modelo_pelt.predict(pen=penalizacion_bic)
-
-# 5. Traducir los índices a fechas reales cuidando los límites de la serie
-fechas_quiebre = []
-for idx in puntos_quiebre_indices[:-1]:
-    if idx >= len(serie):
-        idx = len(serie) - 1
-    fechas_quiebre.append(serie.index[idx])
-
-print(f"El algoritmo PELT ha analizado la serie y encontró {len(fechas_quiebre)} quiebre(s) estructural(es) óptimo(s).")
-for i, fecha in enumerate(fechas_quiebre, start=1):
-    print(f"  Quiebre {i}: Detectado en el trimestre alrededor de {fecha.date()}")
-
-# 6. Graficar todos los regímenes encontrados libremente
-plt.figure(figsize=(10, 5))
-plt.plot(serie, color="black", label="Tasa Crecimiento PIB Alemania")
-for idx, f in enumerate(fechas_quiebre):
-    label_grafica = f"Quiebre {f.year}" if idx == 0 or fechas_quiebre[idx-1].year != f.year else ""
-    plt.axvline(f, color="red", linestyle="--", linewidth=1.5, label=label_grafica)
-
-# Evitar duplicados en la leyenda por si acaso
-handles, labels = plt.gca().get_legend_handles_labels()
-by_label = dict(zip(labels, handles))
-plt.legend(by_label.values(), by_label.keys())
-
-plt.title("Todos los Regímenes Estructurales Detectados Libremente (PELT)")
-plt.xlabel("Fecha")
-plt.ylabel("Tasa de crecimiento (%)")
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig(RESULTADOS_DIR / "06_todos_quiebres_pelt.png", dpi=150)
-plt.show()
 
 # %% Tabla resumen de modelos estimados
 
@@ -570,200 +527,3 @@ print(
     f"de residuales, técnica que no requiere asumir normalidad en los errores."
 )
 # %%
-
-
-
-
-
-# %% ===========================================================================
-# MODELO PARALELO: SUBMUESTRA POST-REUNIFICACIÓN (1992-06-30 en adelante)
-# =============================================================================
-
-print("\n" + "="*50)
-print("ESTIMACIÓN DEL MODELO PARALELO (SUBMUESTRA 1992-2019)")
-print("="*50)
-
-# 1. Recortar la serie desde el último quiebre estructural de PELT
-serie_post = serie["1992-06-30":]
-
-print(f"Observaciones submuestra: {len(serie_post)}")
-print(f"Periodo analizado       : {serie_post.index[0].date()} — {serie_post.index[-1].date()}")
-
-# 2. Re-verificar Estacionariedad con Test ADF para la subuestra
-adf_post = adfuller(serie_post, autolag="AIC")
-print(f"\n-> p-valor ADF (Submuestra): {adf_post[1]:.4f}")
-d_post = 0 if adf_post[1] < 0.05 else 1
-print(f"La submuestra es {'ESTACIONARIA' if d_post==0 else 'NO ESTACIONARIA'}. Se usará d={d_post}")
-
-# 3. Estimar los modelos candidatos exclusivamente en la submuestra
-modelos_candidatos_post = {
-    "ARMA(1,0) Post": (1, d_post, 0),
-    "ARMA(4,0) Post": (4, d_post, 0),
-    "ARMA(1,1) Post": (1, d_post, 1),
-}
-
-estimaciones_post = {}
-
-for nombre, orden in modelos_candidatos_post.items():
-    modelo_p = SARIMAX(
-        serie_post,
-        order=orden,
-        trend="c",
-        enforce_stationarity=False,
-        enforce_invertibility=False
-    )
-    # Usamos el optimizador robusto 'bfgs'
-    estimaciones_post[nombre] = modelo_p.fit(method='bfgs', maxiter=400, disp=False)
-
-# 4. Tabla de Diagnóstico de Residuos para la Submuestra
-tabla_diagnostico_post = []
-
-for nombre in modelos_candidatos_post.keys():
-    resultado = estimaciones_post[nombre]
-    p = resultado.model.order[0]
-    q = resultado.model.order[2]
-    n_inicial = max(p, q, 1)
-    residuos_p = resultado.resid.dropna().iloc[n_inicial:]
-
-    # Pruebas estadísticas
-    jb_pvalue = jarque_bera(residuos_p).pvalue
-    arch_1 = het_arch(residuos_p, nlags=1)[1]
-    ljung_box = acorr_ljungbox(residuos_p, lags=[5, 10, 20], return_df=True)
-
-    tabla_diagnostico_post.append({
-        "Modelo Submuestra": nombre,
-        "JB (Normalidad)": jb_pvalue,
-        "ARCH (Homocedast)": arch_1,
-        "LB(5) (No Autocorr)": ljung_box.loc[5,  "lb_pvalue"],
-        "LB(10) (No Autocorr)": ljung_box.loc[10, "lb_pvalue"],
-        "LB(20) (No Autocorr)": ljung_box.loc[20, "lb_pvalue"],
-        "AIC": resultado.aic,
-        "BIC": resultado.bic
-    })
-
-tabla_diagnostico_post_df = pd.DataFrame(tabla_diagnostico_post)
-
-print("\n=== TABLA DE DIAGNÓSTICO: MODELO PARALELO (p-valores) ===")
-print("p-valor > 0.05 indica que el supuesto SE CUMPLE")
-print(tabla_diagnostico_post_df.round(3).to_string(index=False))
-
-
-
-# %% ===========================================================================
-# VISUALIZACIÓN FINAL DEL MODELO PARALELO (PÓSTER)
-# =============================================================================
-
-# Definimos el modelo ganador de la submuestra
-nombre_ganador_post = "ARMA(4,0) Post"
-modelo_final_post = estimaciones_post[nombre_ganador_post]
-
-print("\n" + "="*50)
-print(f"RESULTADOS FINALES PARA EL PÓSTER: {nombre_ganador_post}")
-print("="*50)
-
-# %% 1. Tabla de Coeficientes con Asteriscos de Significancia ===================
-
-# Extraer parámetros, errores estándar y p-valores numéricos
-params_p  = modelo_final_post.params
-errores_p = modelo_final_post.bse
-
-# %% 1. Tabla de Coeficientes con Asteriscos de Significancia ===================
-
-# Extraer parámetros, errores estándar y p-valores numéricos
-params_p  = modelo_final_post.params
-errores_p = modelo_final_post.bse
-pvalores  = modelo_final_post.pvalues
-
-# Función para agregar asteriscos según significancia
-def significancia_asteriscos(pvalue):
-    """Añade asteriscos según nivel de significancia"""
-    if pvalue < 0.01:
-        return "***"
-    elif pvalue < 0.05:
-        return "**"
-    elif pvalue < 0.10:
-        return "*"
-    else:
-        return ""
-
-# Crear tabla de parámetros
-tabla_coef_post = []
-
-for param_name in params_p.index:
-    param_valor = params_p[param_name]
-    se_valor = errores_p[param_name]
-    pval = pvalores[param_name]
-    asteriscos = significancia_asteriscos(pval)
-    
-    tabla_coef_post.append({
-        "Parámetro": param_name,
-        "Coeficiente": f"{param_valor:.4f}{asteriscos}",
-        "Err. Estándar": f"{se_valor:.4f}",
-        "t-stat": f"{param_valor/se_valor:.4f}",
-        "p-valor": f"{pval:.4f}"
-    })
-
-tabla_coef_post_df = pd.DataFrame(tabla_coef_post)
-
-print("\n" + "="*70)
-print(f"TABLA DE COEFICIENTES: {nombre_ganador_post}")
-print("="*70)
-print(tabla_coef_post_df.to_string(index=False))
-print("\nNota: *** p<0.01, ** p<0.05, * p<0.10")
-print(f"Log-Likelihood: {modelo_final_post.llf:.4f}")
-print(f"AIC: {modelo_final_post.aic:.4f}")
-print(f"BIC: {modelo_final_post.bic:.4f}")
-
-
-# %% 2. Gráfica de la serie original vs serie paralela ===========================
-
-fig, axes = plt.subplots(2, 1, figsize=(14, 8))
-
-# Gráfica 1: Serie completa (1961-2019) con línea de quiebre
-axes[0].plot(serie, color="black", linewidth=1.5, label="Datos 1961-2019")
-axes[0].axvline(serie_post.index[0], color="red", linestyle="--", linewidth=2, label="Inicio submuestra (1992)")
-axes[0].axhline(0, color="gray", linewidth=0.8, linestyle=":", alpha=0.5)
-axes[0].set_title("Serie Completa: Tasa de Crecimiento del PIB de Alemania (1961-2019)", fontsize=12, fontweight="bold")
-axes[0].set_ylabel("Tasa de crecimiento (%)")
-axes[0].legend(loc="upper left")
-axes[0].grid(True, alpha=0.3)
-
-# Gráfica 2: Serie paralela (1992-2019) con características destacadas
-axes[1].plot(serie_post, color="darkblue", linewidth=1.5, label=f"Modelo Paralelo (1992-2019, n={len(serie_post)})")
-axes[1].axhline(0, color="gray", linewidth=0.8, linestyle=":", alpha=0.5)
-axes[1].axhline(serie_post.mean(), color="green", linewidth=1, linestyle="--", alpha=0.7, label=f"Media: {serie_post.mean():.2f}%")
-axes[1].fill_between(
-    serie_post.index,
-    serie_post.mean() - serie_post.std(),
-    serie_post.mean() + serie_post.std(),
-    alpha=0.2,
-    color="green",
-    label=f"±1 Desv. Estándar"
-)
-axes[1].set_title(f"Submuestra Post-Reunificación: {nombre_ganador_post}", fontsize=12, fontweight="bold")
-axes[1].set_xlabel("Fecha")
-axes[1].set_ylabel("Tasa de crecimiento (%)")
-axes[1].legend(loc="upper left")
-axes[1].grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.savefig(RESULTADOS_DIR / "07_serie_modelo_paralelo.png", dpi=150, bbox_inches="tight")
-plt.show()
-
-print("\n✓ Gráfica guardada: 07_serie_modelo_paralelo.png")
-
-
-# %% 3. Estadísticas descriptivas del modelo paralelo =========================
-
-print("\n" + "="*70)
-print(f"ESTADÍSTICAS DESCRIPTIVAS: SUBMUESTRA {nombre_ganador_post}")
-print("="*70)
-print(f"Observaciones        : {len(serie_post)}")
-print(f"Período             : {serie_post.index[0].date()} a {serie_post.index[-1].date()}")
-print(f"Media               : {serie_post.mean():.4f}%")
-print(f"Desv. Estándar      : {serie_post.std():.4f}%")
-print(f"Mínimo              : {serie_post.min():.4f}%")
-print(f"Máximo              : {serie_post.max():.4f}%")
-print(f"Rango               : {serie_post.max() - serie_post.min():.4f}%")
-print(f"Coef. Variación     : {(serie_post.std() / serie_post.mean()):.4f}")
-print("="*70)
