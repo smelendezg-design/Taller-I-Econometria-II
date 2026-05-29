@@ -57,9 +57,6 @@ serie = pd.to_numeric(serie, errors="coerce").dropna()
 # con la metodología para detectar cambios estructurales en la serie de tiempo Test de Chow. 
 # Se trabaja con 1961 Q1 - 2019 Q4 (111 observaciones).
 
-#Se aplica test de cambio estructural para verificar los peridoos donde existe cambio de los errores.
-
-
 serie = serie["1992-06-30":"2019-12-31"]
 
 print("=== Descripción de la serie ===")
@@ -202,7 +199,7 @@ def se_media_incondicional_sarimax(resultado):
     return np.sqrt(varianza_mu)
 
 
-# # Estimación de cada modelo candidato
+# Estimación de cada modelo candidato
 for nombre, orden in modelos_candidatos.items():
     modelo = SARIMAX(
         serie,
@@ -211,7 +208,6 @@ for nombre, orden in modelos_candidatos.items():
         enforce_stationarity=False,
         enforce_invertibility=False
     )
-    # AJUSTE AQUÍ: Se cambia el método a 'bfgs' y se suben las iteraciones para asegurar convergencia
     estimacion_modelo = modelo.fit(method='bfgs', maxiter=400, disp=False)
     estimaciones[nombre] = estimacion_modelo
 
@@ -526,4 +522,3 @@ print(
     f"El intervalo de confianza al 95% se construyó mediante bootstrapping "
     f"de residuales, técnica que no requiere asumir normalidad en los errores."
 )
-# %%
