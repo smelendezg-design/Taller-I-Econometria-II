@@ -52,7 +52,7 @@ serie = pd.to_numeric(serie, errors="coerce").dropna()
 # atípico que viola los supuestos del modelo ARMA: los residuales presentan
 # heterocedasticidad, autocorrelación y no normalidad en todos los modelos
 # candidatos cuando se incluye dicho periodo.
-#Se excluye de la serie de tiempo los periodos anteriores al 1992-06-30, ya que concuerda
+# Se excluye de la serie de tiempo los periodos anteriores al 1992-06-30, ya que concuerda
 # con los choques sobre el PIB derivado de la reunificación alemana. Este periodo fue confirmado
 # con la metodología para detectar cambios estructurales en la serie de tiempo Test de Chow. 
 # Se trabaja con 1961 Q1 - 2019 Q4 (111 observaciones).
