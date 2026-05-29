@@ -12,9 +12,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import jarque_bera, probplot
+import ruptures as rpt
 
 # Módulos de statsmodels
+from scipy.stats import jarque_bera, probplot
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from statsmodels.tsa.statespace.sarimax import SARIMAX
@@ -742,11 +743,142 @@ print(exog_dummies[exog_dummies.sum(axis=1) > 0].to_string())
 
 
 # ============================================================
-# SECCIÓN C — SARIMAX(4,0,0) CON DUMMIES COVID
+# SECCIÓN C — TEST DE BAI-PERRON (cambios estructurales múltiples)
+# ============================================================
+# Bai & Perron (1998, 2003) permiten detectar m quiebres estructurales
+# desconocidos en la media (y/o tendencia) de la serie. 
+
+print("\n" + "="*60)
+print("SECCIÓN C — TEST DE BAI-PERRON [ruptures]")
+print("="*60)
+
+y = serie.values  # array 1-D
+
+
+M_max    = 5        # máximo de quiebres a considerar
+modelo_bp = rpt.Dynp(model="l2", jump=1).fit(y)
+
+# BIC manual: BIC = n·ln(RSS/n) + k·ln(n)
+#   k = número de parámetros = m + 1 medias + 1 varianza → aquí usamos m+1
+n = len(y)
+bic_scores = {}
+
+for m in range(0, M_max + 1):
+    breakpoints = modelo_bp.predict(n_bkps=m)   # índices de fin de cada segmento
+    segmentos   = rpt.utils.pairwise([0] + breakpoints)
+    rss = sum(
+        np.sum((y[i:j] - y[i:j].mean()) ** 2)
+        for i, j in segmentos
+    )
+    k            = m + 1          # nº de parámetros de media
+    bic_m        = n * np.log(rss / n) + k * np.log(n)
+    bic_scores[m] = bic_m
+    print(f"  m={m} quiebres  →  RSS={rss:.4f}  BIC={bic_m:.3f}")
+
+m_optimo = min(bic_scores, key=bic_scores.get)
+print(f"\n  ✓ Número óptimo de quiebres (BIC): m = {m_optimo}")
+
+
+breakpoints_optimos = modelo_bp.predict(n_bkps=m_optimo)
+fechas_quiebre = [serie.index[bp - 1].date() for bp in breakpoints_optimos[:-1]]
+
+print(f"  Fechas de quiebre estimadas: {fechas_quiebre}")
+
+
+segmentos_optimos = rpt.utils.pairwise([0] + breakpoints_optimos)
+print("\n  Medias por régimen:")
+for idx, (i, j) in enumerate(segmentos_optimos):
+    fecha_ini = serie.index[i].date()
+    fecha_fin = serie.index[j - 1].date()
+    media_reg = y[i:j].mean()
+    print(f"    Régimen {idx+1}: {fecha_ini} — {fecha_fin}  |  media = {media_reg:.4f}%")
+
+
+plt.figure(figsize=(11, 5))
+plt.plot(serie, color="black", linewidth=1.2, label="Serie original")
+
+colores_regimen = ["#2196F3", "#4CAF50", "#FF9800", "#9C27B0", "#F44336", "#00BCD4"]
+
+for idx, (i, j) in enumerate(segmentos_optimos):
+    seg_idx   = serie.index[i:j]
+    seg_media = y[i:j].mean()
+    color_r   = colores_regimen[idx % len(colores_regimen)]
+    plt.hlines(
+        seg_media, seg_idx[0], seg_idx[-1],
+        colors=color_r, linewidths=2.0, linestyles="-",
+        label=f"Media régimen {idx+1}: {seg_media:.2f}%"
+    )
+
+for fecha in fechas_quiebre:
+    plt.axvline(
+        pd.Timestamp(fecha),
+        color="red", linewidth=1.2, linestyle="--", alpha=0.8
+    )
+    plt.text(
+        pd.Timestamp(fecha), plt.ylim()[1] * 0.92,
+        str(fecha), rotation=90, fontsize=8,
+        color="red", va="top", ha="right"
+    )
+
+plt.axhline(0, color="black", linewidth=0.6, linestyle=":")
+plt.title(
+    f"Test de Bai-Perron — CLI Alemania (1992–2023)\n"
+    f"Quiebres óptimos (BIC): m = {m_optimo}"
+)
+plt.xlabel("Fecha")
+plt.ylabel("Tasa de crecimiento (%)")
+plt.legend(fontsize=8, loc="lower left")
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(RESULTADOS_DIR / "11_bai_perron.png", dpi=150)
+plt.show()
+
+filas_bp = []
+for idx, (i, j) in enumerate(segmentos_optimos):
+    filas_bp.append({
+        "Régimen"        : idx + 1,
+        "Inicio"         : str(serie.index[i].date()),
+        "Fin"            : str(serie.index[j - 1].date()),
+        "Obs."           : j - i,
+        "Media (%)"      : round(y[i:j].mean(), 4),
+        "Desv. Est. (%)": round(y[i:j].std(), 4),
+    })
+
+tabla_bp_df = pd.DataFrame(filas_bp)
+print("\n" + tabla_bp_df.to_string(index=False))
+
+# Tabla como imagen para el póster
+if tabla_bp_df.empty:
+    print("  ⚠ Sin quiebres detectados: no se genera tabla imagen.")
+else:
+    fig, ax = plt.subplots(figsize=(10, max(2, 0.6 * len(filas_bp) + 1)))
+    ax.axis("off")
+    tbl_img = ax.table(
+        cellText=tabla_bp_df.values,
+        colLabels=tabla_bp_df.columns,
+        cellLoc="center",
+        loc="center"
+    )
+    tbl_img.auto_set_font_size(False)
+    tbl_img.set_fontsize(9)
+    tbl_img.scale(1.3, 2.0)
+    for j in range(len(tabla_bp_df.columns)):
+        tbl_img[0, j].set_facecolor("#D3D3D3")
+        tbl_img[0, j].set_text_props(fontweight="bold")
+    plt.title(
+        f"Bai-Perron — Regímenes estimados (m = {m_optimo})",
+        fontsize=11, pad=18
+    )
+    plt.tight_layout()
+    plt.savefig(RESULTADOS_DIR / "12_tabla_bai_perron.png", dpi=150, bbox_inches="tight")
+    plt.show()
+
+# ============================================================
+# SECCIÓN D — SARIMAX(4,0,0) CON DUMMIES COVID
 # ============================================================
 
 print("\n" + "="*60)
-print("SECCIÓN C — ARMA(4,0) con dummies COVID (2020 Q2 y 2021 Q1)")
+print("SECCIÓN D — SARIMAX(4,0,0) con dummies COVID (2020 Q2 y 2021 Q1)")
 print("="*60)
 
 modelo_covid = SARIMAX(
@@ -837,7 +969,7 @@ plt.show()
 
 
 # ============================================================
-# SECCIÓN D — PRONÓSTICO 10 TRIMESTRES DESDE 2023 Q4
+# SECCIÓN E — PRONÓSTICO 10 TRIMESTRES DESDE 2023 Q4
 # ============================================================
 # Se usa el modelo con dummies si mejora el diagnóstico; fuera de muestra
 # las dummies toman valor 0 (el choque COVID no se repite en el pronóstico).

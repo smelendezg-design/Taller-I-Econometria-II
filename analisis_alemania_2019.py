@@ -644,7 +644,7 @@ else:
 
 # ============================================================
 #  PRONOSTICO
-# SECCIÓN B — SARIMAX CON DUMMY DE OUTLIER (si CUSUM lo sugiere)
+# SECCIÓN B — SARIMAX CON DUMMY DE OUTLIER
 # ============================================================
 # El Q-Q plot de 2019 muestra un residual extremo en el extremo inferior
 # que coincide con la Gran Recesión (2008 Q4: −6.7 %).
