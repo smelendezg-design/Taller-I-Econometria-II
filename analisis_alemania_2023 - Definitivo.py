@@ -215,6 +215,23 @@ for nombre, orden in modelos_candidatos.items():
         f"c / (1 - suma AR): {media_incondicional_sarimax(estimacion_modelo):.3f}"
     )
 
+# --- Estadísticos exactos LB(20) y ARCH(5) para el ARMA(4,0) ---
+from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
+
+resultado_40 = estimaciones["ARMA(4,0)"]
+p_40         = resultado_40.model.order[0]
+q_40         = resultado_40.model.order[2]
+n_inicial_40 = max(p_40, q_40, 1)
+residuos_40  = resultado_40.resid.dropna().iloc[n_inicial_40:]
+
+lb20  = acorr_ljungbox(residuos_40, lags=[20], return_df=True)
+arch5 = het_arch(residuos_40, nlags=5)
+
+print("\n=== Estadísticos para tabla del póster — ARMA(4,0) sin dummies ===")
+print(f"LB(20)  — estadístico: {lb20.loc[20,'lb_stat']:.4f}   p-valor: {lb20.loc[20,'lb_pvalue']:.4f}")
+print(f"ARCH(5) — estadístico: {arch5[0]:.4f}   p-valor: {arch5[1]:.4f}")
+print(f"JB      — estadístico: 1211.36              p-valor: 0.0000")
+
 
 # %% Tabla resumen de modelos estimados
 tabla_modelos = []
@@ -336,6 +353,8 @@ plt.title("Tabla resumen de modelos estimados", fontsize=12, pad=20
 plt.savefig(RESULTADOS_DIR / "02b_tabla_modelos.png", dpi=150, bbox_inches="tight")
 plt.show()
 
+from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
+
 # %% Tabla explícita del modelo final ARMA(4,0)
  
 nombre_final     = "ARMA(4,0)"
@@ -350,6 +369,16 @@ coefs = pd.DataFrame({
     "significativo 5%"  : estimacion_final.pvalues < 0.05
 })
 print(coefs.to_string())
+
+from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
+
+residuos_40 = estimaciones["ARMA(4,0)"].resid.dropna().iloc[4:]
+
+lb20  = acorr_ljungbox(residuos_40, lags=[20], return_df=True)
+arch5 = het_arch(residuos_40, nlags=5)
+
+print(f"LB(20)  estadístico: {lb20.loc[20,'lb_stat']:.4f}")
+print(f"ARCH(5) estadístico: {arch5[0]:.4f}")
 
 # %% =========================
 # PASO 3: VALIDACIÓN DE SUPUESTOS
@@ -376,28 +405,22 @@ for nombre in nombres_modelos:
     plt.savefig(RESULTADOS_DIR / f"03a_residuales_{nombre.replace('(','').replace(')','').replace(',','_')}.png", dpi=150)
     plt.show()
 
-    # --- FAC y FACP de los residuales (verifica no autocorrelación) ---
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    plot_acf(residuos, lags=15, alpha=0.05, bartlett_confint=False, ax=axes[0])
-    axes[0].set_title(f"FAC residuales — {nombre}")
-    axes[0].set_ylim(-1, 1)
-    plot_pacf(residuos, lags=15, alpha=0.05, ax=axes[1])
-    axes[1].set_title(f"FACP residuales — {nombre}")
-    axes[1].set_ylim(-1, 1)
+    # --- FAC de residuales (verifica no autocorrelación) ---
+    fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+    plot_acf(residuos, lags=15, alpha=0.05, bartlett_confint=False, ax=ax)
+    ax.set_title(f"FAC residuales — {nombre}")
+    ax.set_ylim(-1, 1)
     plt.tight_layout()
-    plt.savefig(RESULTADOS_DIR / f"03b_fac_facp_residuales_{nombre.replace('(','').replace(')','').replace(',','_')}.png", dpi=150)
+    plt.savefig(RESULTADOS_DIR / f"03b_fac_residuales_{nombre.replace('(','').replace(')','').replace(',','_')}.png", dpi=150)
     plt.show()
 
-    # --- FAC y FACP de los residuales al cuadrado (verifica homocedasticidad) ---
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    plot_acf(res2, lags=15, alpha=0.05, bartlett_confint=False, ax=axes[0])
-    axes[0].set_title(f"FAC residuales² — {nombre}")
-    axes[0].set_ylim(-1, 1)
-    plot_pacf(res2, lags=15, alpha=0.05, ax=axes[1])
-    axes[1].set_title(f"FACP residuales² — {nombre}")
-    axes[1].set_ylim(-1, 1)
+    # --- FACP de residuales al cuadrado (verifica homocedasticidad) ---
+    fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+    plot_pacf(res2, lags=15, alpha=0.05, ax=ax)
+    ax.set_title(f"FACP residuales² — {nombre}")
+    ax.set_ylim(-1, 1)
     plt.tight_layout()
-    plt.savefig(RESULTADOS_DIR / f"03c_fac_facp_res2_{nombre.replace('(','').replace(')','').replace(',','_')}.png", dpi=150)
+    plt.savefig(RESULTADOS_DIR / f"03c_facp_res2_{nombre.replace('(','').replace(')','').replace(',','_')}.png", dpi=150)
     plt.show()
 
 # %% Q-Q plot de los residuales
