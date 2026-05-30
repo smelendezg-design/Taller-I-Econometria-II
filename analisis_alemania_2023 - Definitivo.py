@@ -216,8 +216,6 @@ for nombre, orden in modelos_candidatos.items():
     )
 
 # --- Estadísticos exactos LB(20) y ARCH(5) para el ARMA(4,0) ---
-from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
-
 resultado_40 = estimaciones["ARMA(4,0)"]
 p_40         = resultado_40.model.order[0]
 q_40         = resultado_40.model.order[2]
@@ -353,8 +351,6 @@ plt.title("Tabla resumen de modelos estimados", fontsize=12, pad=20
 plt.savefig(RESULTADOS_DIR / "02b_tabla_modelos.png", dpi=150, bbox_inches="tight")
 plt.show()
 
-from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
-
 # %% Tabla explícita del modelo final ARMA(4,0)
  
 nombre_final     = "ARMA(4,0)"
@@ -369,8 +365,6 @@ coefs = pd.DataFrame({
     "significativo 5%"  : estimacion_final.pvalues < 0.05
 })
 print(coefs.to_string())
-
-from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 
 residuos_40 = estimaciones["ARMA(4,0)"].resid.dropna().iloc[4:]
 
@@ -602,60 +596,6 @@ print(
     f"El intervalo de confianza al 95% se construyó mediante bootstrapping "
     f"de residuales, técnica que no requiere asumir normalidad en los errores."
 )
-
-# extension_2023.py
-# Extensión del análisis 1992–2023:
-#   1. Test CUSUM sobre residuales del ARMA(4,0) para identificar periodos atípicos
-#   2. SARIMAX con dummies para los outliers COVID (2020 Q2 y 2021 Q1) detectados
-#      en el Q-Q plot y confirmados por CUSUM
-#   3. Diagnóstico comparativo del modelo corregido
-#   4. Pronóstico 10 trimestres adelante desde 2023 Q4
-#
-# REQUISITO: ejecutar analisis_alemania_2023.py primero (o correr ambos en
-# la misma sesión), de modo que `serie`, `estimaciones` y `RESULTADOS_DIR`
-# ya estén definidas en el entorno.
-# Si se corre de forma independiente, descomente el bloque marcado con
-# "--- INICIO bloque independiente ---".
-
-# %% Importaciones adicionales
-
-from pathlib import Path
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from scipy.stats import jarque_bera, probplot
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
-from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-
-# --- INICIO bloque independiente ---
-# Descomente si corre este archivo sin el script base.
-
-# BASE_DIR       = Path(__file__).resolve().parent
-# DATA_DIR       = BASE_DIR / "datos"
-# RESULTADOS_DIR = BASE_DIR / "resultados"
-# RESULTADOS_DIR.mkdir(exist_ok=True)
-#
-# raw = pd.read_excel(
-#     DATA_DIR / "LORSGPORDEQ659S.xlsx",
-#     sheet_name="Quarterly",
-#     parse_dates=["observation_date"]
-# )
-# raw = raw.set_index("observation_date")
-# raw.index = pd.DatetimeIndex(raw.index).to_period("Q").to_timestamp("Q")
-# serie = pd.to_numeric(raw["LORSGPORDEQ659S"], errors="coerce").dropna()
-# serie = serie["1992-06-30":"2023-10-01"]
-#
-# d = 0  # ADF confirma estacionariedad en el script base
-# modelos_candidatos = {"ARMA(1,0)": (1,d,0), "ARMA(4,0)": (4,d,0), "ARMA(1,1)": (1,d,1)}
-# estimaciones = {}
-# for nombre, orden in modelos_candidatos.items():
-#     mod = SARIMAX(serie, order=orden, trend="c",
-#                   enforce_stationarity=False, enforce_invertibility=False)
-#     estimaciones[nombre] = mod.fit(method="bfgs", maxiter=400, disp=False)
-
-# --- FIN bloque independiente ---
-
 
 # ============================================================
 # SECCIÓN A — TEST CUSUM SOBRE RESIDUALES DEL ARMA(4,0)
@@ -998,7 +938,7 @@ plt.show()
 # las dummies toman valor 0 (el choque COVID no se repite en el pronóstico).
 
 print("\n" + "="*60)
-print("SECCIÓN D — Pronóstico 10 trimestres desde 2023 Q4")
+print("SECCIÓN E — Pronóstico 10 trimestres desde 2023 Q4")
 print("="*60)
 
 # Verificar si el modelo con dummies mejora (al menos JB o LB)
